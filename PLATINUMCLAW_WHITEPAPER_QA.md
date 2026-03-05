@@ -2,7 +2,7 @@
 
 Version: 1.0  
 Audience: Operator/Owner  
-Scope: Local-first, high-security OpenClaw deployment profile branded as **Platinum Fang**
+Scope: Local-first, high-security Platinum Fang deployment profile branded as **Platinum Fang**
 
 ---
 
@@ -43,13 +43,13 @@ docker compose run --rm openclaw-cli pairing list discord
 ## 1) What is Platinum Fang?
 
 **Q:** What is Platinum Fang?  
-**A:** Platinum Fang is a hardened operating profile and runbook for OpenClaw focused on:
+**A:** Platinum Fang is a hardened operating profile and runbook focused on:
 - local-first runtime
 - Discord-first collaboration
 - strict security boundaries
 - on-demand usage (only when you are working)
 
-Platinum Fang is not a separate codebase. It is a security-first deployment pattern on top of OpenClaw.
+Platinum Fang is not a separate codebase. It is a security-first deployment pattern on top of the underlying engine.
 
 ---
 
@@ -68,7 +68,7 @@ If your bot is reachable by many users and has broad tools, prompt injection ris
 ## 3) Trust model in plain language
 
 **Q:** Is this multi-tenant secure for adversarial users?  
-**A:** No. OpenClaw is designed as a personal-assistant trust model. Platinum Fang enforces a one-owner boundary unless you explicitly add trusted users.
+**A:** No. Platinum Fang uses a personal-assistant trust model and enforces a one-owner boundary unless you explicitly add trusted users.
 
 **Q:** What does that mean operationally?  
 **A:** Treat one gateway as one trust boundary. Do not share broad tool authority with untrusted users.
@@ -219,7 +219,7 @@ scripts/platinumfang-mode.sh off
 1. Create app and bot in Discord Developer Portal
 2. Enable Message Content Intent and Server Members Intent
 3. Invite bot with required scopes/permissions
-4. Set bot token in OpenClaw config
+4. Set bot token in Platinum Fang config
 5. Configure DM pairing + guild allowlist + mention gating
 6. DM bot, retrieve pairing code, approve pairing
 7. Validate with status and security audit
@@ -344,7 +344,7 @@ scripts/platinumfang-mode.sh safe
 ## 17) Capability map and control boundary
 
 **Q:** What does "every capability" mean in Platinum Fang context?  
-**A:** Every callable OpenClaw capability that can be safely exposed in a one-owner trust boundary with explicit profile controls and auditability.
+**A:** Every callable Platinum Fang capability that can be safely exposed in a one-owner trust boundary with explicit profile controls and auditability.
 
 **Core domains**
 1. Profile and policy switching

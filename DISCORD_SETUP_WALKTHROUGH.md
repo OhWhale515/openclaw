@@ -6,12 +6,12 @@ Use this file if terminal output is scrolling away.
 
 - Discord account
 - A Discord server you control
-- OpenClaw repo and Docker setup already available
+- Platinum Fang repo and Docker setup already available
 
 ## 1) Create a Discord bot
 
 1. Open `https://discord.com/developers/applications`
-2. Click **New Application** and name it (example: `OpenClaw`)
+2. Click **New Application** and name it (example: `Platinum Fang`)
 3. Open the app, then go to **Bot**
 4. Under **Privileged Gateway Intents**, enable:
    - `Message Content Intent` (required)
@@ -38,7 +38,7 @@ Use this file if terminal output is scrolling away.
 2. Right-click your server icon -> **Copy Server ID**
 3. Right-click your profile/username -> **Copy User ID**
 
-## 4) Configure OpenClaw (WSL terminal)
+## 4) Configure Platinum Fang (WSL terminal)
 
 From repo root (`/mnt/e/Sterling Storage/openclaw`):
 
