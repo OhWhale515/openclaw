@@ -1,10 +1,7 @@
-# Platinum Fang - Personal AI Assistant
+# 🐺 Platinum Fang - Personal AI Assistant
 
 <p align="center">
-    <picture>
-        <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/openclaw/openclaw/main/docs/assets/openclaw-logo-text-dark.png">
-        <img src="https://raw.githubusercontent.com/openclaw/openclaw/main/docs/assets/openclaw-logo-text.png" alt="Platinum Fang" width="500">
-    </picture>
+    <img src="docs/assets/platinumfang-logo.png" alt="Platinum Fang" width="640">
 </p>
 
 <p align="center">
