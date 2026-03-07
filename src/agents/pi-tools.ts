@@ -277,6 +277,21 @@ export function createOpenClawCodingTools(options?: {
   const profilePolicy = resolveToolProfilePolicy(profile);
   const providerProfilePolicy = resolveToolProfilePolicy(providerProfile);
 
+  // #region agent log
+  fetch("http://127.0.0.1:7812/ingest/f4f56089-d2ca-4d5b-b01e-f046e03d0550", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "de43c7" },
+    body: JSON.stringify({
+      sessionId: "de43c7",
+      location: "pi-tools.ts:profile",
+      message: "effective tool profile",
+      data: { profile, providerProfile, agentId },
+      timestamp: Date.now(),
+      hypothesisId: "D",
+    }),
+  }).catch(() => {});
+  // #endregion
+
   const profilePolicyWithAlsoAllow = mergeAlsoAllowPolicy(profilePolicy, profileAlsoAllow);
   const providerProfilePolicyWithAlsoAllow = mergeAlsoAllowPolicy(
     providerProfilePolicy,

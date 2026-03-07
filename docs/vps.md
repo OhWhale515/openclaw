@@ -20,6 +20,7 @@ deployments work at a high level.
 - **Hetzner (Docker)**: [Hetzner](/install/hetzner)
 - **GCP (Compute Engine)**: [GCP](/install/gcp)
 - **exe.dev** (VM + HTTPS proxy): [exe.dev](/install/exe-dev)
+- **Orgo** (cloud computers for AI agents): [Orgo](/install/orgo) — Ubuntu desktops via [orgo.ai](https://www.orgo.ai); free tier available
 - **AWS (EC2/Lightsail/free tier)**: works well too. Video guide:
   [https://x.com/techfrenAJ/status/2014934471095812547](https://x.com/techfrenAJ/status/2014934471095812547)
 

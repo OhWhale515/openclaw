@@ -690,6 +690,36 @@ export async function runEmbeddedAttempt(
           disableMessageTool: params.disableMessageTool,
         });
     const tools = sanitizeToolsForGoogle({ tools: toolsRaw, provider: params.provider });
+    const toolNames = tools.map((t) => t.name);
+    const hasWebSearch = toolNames.includes("web_search");
+    process.stderr.write(
+      `[openclaw web_search debug] embedded run tools: web_search=${hasWebSearch ? "YES" : "NO"} list=${toolNames.join(",")}\n`,
+    );
+    // #region agent log
+    fetch("http://127.0.0.1:7812/ingest/f4f56089-d2ca-4d5b-b01e-f046e03d0550", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "de43c7" },
+      body: JSON.stringify({
+        sessionId: "de43c7",
+        location: "attempt.ts:tools",
+        message: "embedded run tools",
+        data: { toolNames, hasWebSearch, count: toolNames.length },
+        timestamp: Date.now(),
+        hypothesisId: "A,B,C",
+      }),
+    }).catch(() => {});
+    // #endregion
+    log.info(
+      "embedded run tools: %s (web_search=%s)",
+      toolNames.join(", "),
+      hasWebSearch ? "yes" : "no",
+    );
+    if (!hasWebSearch) {
+      log.warn(
+        "[web_search debug] web_search is NOT in the tool list. toolNames=%s",
+        toolNames.join(", "),
+      );
+    }
     const allowedToolNames = collectAllowedToolNames({
       tools,
       clientTools: params.clientTools,

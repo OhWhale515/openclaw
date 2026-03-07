@@ -158,6 +158,9 @@ For VPS/cloud hosts, avoid third-party "1-click" marketplace images when possibl
   <Card title="Bun" href="/install/bun" icon="zap">
     CLI-only usage via the Bun runtime.
   </Card>
+  <Card title="Orgo" href="/install/orgo" icon="monitor">
+    Run the gateway on Orgo.ai cloud computers (Ubuntu desktops for agents). [Platinum Fang fork](/install/orgo-platinum-fang): same secure baseline without Docker.
+  </Card>
 </CardGroup>
 
 ## After install

@@ -21,12 +21,13 @@ import {
   writeCache,
 } from "./web-shared.js";
 
-const SEARCH_PROVIDERS = ["brave", "perplexity", "grok", "gemini", "kimi"] as const;
+const SEARCH_PROVIDERS = ["brave", "perplexity", "grok", "gemini", "kimi", "serpstack"] as const;
 const DEFAULT_SEARCH_COUNT = 5;
 const MAX_SEARCH_COUNT = 10;
 
 const BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search";
 const PERPLEXITY_SEARCH_ENDPOINT = "https://api.perplexity.ai/search";
+const SERPSTACK_BASE = "https://api.serpstack.com/search";
 
 const XAI_API_ENDPOINT = "https://api.x.ai/v1/responses";
 const DEFAULT_GROK_MODEL = "grok-4-1-fast";
@@ -203,6 +204,10 @@ type KimiConfig = {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+};
+
+type SerpstackConfig = {
+  apiKey?: string;
 };
 
 type GrokSearchResponse = {
@@ -383,6 +388,14 @@ function resolveSearchApiKey(search?: WebSearchConfig): string | undefined {
 }
 
 function missingSearchKeyPayload(provider: (typeof SEARCH_PROVIDERS)[number]) {
+  if (provider === "serpstack") {
+    return {
+      error: "missing_serpstack_access_key",
+      message:
+        "web_search (serpstack) needs an access key. Set SERPSTACK_ACCESS_KEY in the Gateway environment, or configure tools.web.search.serpstack.apiKey.",
+      docs: "https://docs.openclaw.ai/tools/web",
+    };
+  }
   if (provider === "perplexity") {
     return {
       error: "missing_perplexity_api_key",
@@ -442,6 +455,9 @@ function resolveSearchProvider(search?: WebSearchConfig): (typeof SEARCH_PROVIDE
   if (raw === "brave") {
     return "brave";
   }
+  if (raw === "serpstack") {
+    return "serpstack";
+  }
 
   // Auto-detect provider from available API keys (priority order)
   if (raw === "") {
@@ -485,9 +501,37 @@ function resolveSearchProvider(search?: WebSearchConfig): (typeof SEARCH_PROVIDE
       );
       return "grok";
     }
+    // 6. Serpstack (free tier, no card)
+    const serpstackConfig = resolveSerpstackConfig(search);
+    if (resolveSerpstackApiKey(serpstackConfig)) {
+      logVerbose(
+        'web_search: no provider configured, auto-detected "serpstack" from available API keys',
+      );
+      return "serpstack";
+    }
   }
 
   return "brave";
+}
+
+function resolveSerpstackConfig(search?: WebSearchConfig): SerpstackConfig {
+  if (!search || typeof search !== "object") {
+    return {};
+  }
+  const serpstack = "serpstack" in search ? search.serpstack : undefined;
+  if (!serpstack || typeof serpstack !== "object") {
+    return {};
+  }
+  return serpstack as SerpstackConfig;
+}
+
+function resolveSerpstackApiKey(serpstack?: SerpstackConfig): string | undefined {
+  const fromConfig = normalizeApiKey(serpstack?.apiKey);
+  if (fromConfig) {
+    return fromConfig;
+  }
+  const fromEnv = normalizeApiKey(process.env.SERPSTACK_ACCESS_KEY);
+  return fromEnv || undefined;
 }
 
 function resolvePerplexityConfig(search?: WebSearchConfig): PerplexityConfig {
@@ -853,6 +897,107 @@ async function throwWebSearchApiError(res: Response, providerLabel: string): Pro
   const detailResult = await readResponseText(res, { maxBytes: 64_000 });
   const detail = detailResult.text;
   throw new Error(`${providerLabel} API error (${res.status}): ${detail || res.statusText}`);
+}
+
+type SerpstackOrganicResult = {
+  title?: string;
+  url?: string;
+  snippet?: string;
+  displayed_url?: string;
+};
+
+type SerpstackSearchResponse = {
+  request?: { success?: boolean };
+  organic_results?: SerpstackOrganicResult[];
+  success?: boolean;
+  error?: { code?: number; type?: string; info?: string };
+};
+
+const SERPSTACK_PERIOD_MAP: Record<string, string> = {
+  day: "last_day",
+  week: "last_week",
+  month: "last_month",
+  year: "last_year",
+};
+
+async function runSerpstackSearch(params: {
+  query: string;
+  accessKey: string;
+  count: number;
+  timeoutSeconds: number;
+  country?: string;
+  language?: string;
+  period?: string;
+  periodStart?: string;
+  periodEnd?: string;
+}): Promise<
+  Array<{ title: string; url: string; description: string; published?: string; siteName?: string }>
+> {
+  const url = new URL(SERPSTACK_BASE);
+  url.searchParams.set("access_key", params.accessKey);
+  url.searchParams.set("query", params.query);
+  url.searchParams.set("num", String(params.count));
+  if (params.country) {
+    url.searchParams.set("gl", params.country.toLowerCase());
+  }
+  if (params.language) {
+    url.searchParams.set("hl", params.language.toLowerCase());
+  }
+  if (params.period) {
+    url.searchParams.set("period", params.period);
+  }
+  if (params.periodStart) {
+    url.searchParams.set("period_start", params.periodStart);
+  }
+  if (params.periodEnd) {
+    url.searchParams.set("period_end", params.periodEnd);
+  }
+
+  return withTrustedWebSearchEndpoint(
+    {
+      url: url.toString(),
+      timeoutSeconds: params.timeoutSeconds,
+      init: { method: "GET", headers: { Accept: "application/json" } },
+    },
+    async (res) => {
+      const textResult = await readResponseText(res, { maxBytes: 64_000 });
+      const text = textResult.text;
+      // Strip access_key from any error detail
+      const safeText = (text || "").replace(/access_key=[^&\s]+/gi, "access_key=***");
+
+      if (!res.ok) {
+        throw new Error(`Serpstack API error (${res.status}): ${safeText || res.statusText}`);
+      }
+
+      let data: SerpstackSearchResponse;
+      try {
+        data = JSON.parse(text || "{}") as SerpstackSearchResponse;
+      } catch (err) {
+        throw new Error(`Serpstack API returned invalid JSON: ${String(err).replace(/access_key=[^&\s]+/gi, "access_key=***")}`, { cause: err });
+      }
+
+      if (data.success === false && data.error) {
+        const info = (data.error.info || data.error.type || "unknown").replace(
+          /access_key=[^&\s]+/gi,
+          "access_key=***",
+        );
+        throw new Error(`Serpstack API error (${data.error.code ?? ""}): ${info}`);
+      }
+
+      const results = Array.isArray(data.organic_results) ? data.organic_results : [];
+      return results.map((entry) => {
+        const title = entry.title ?? "";
+        const urlStr = entry.url ?? "";
+        const snippet = entry.snippet ?? "";
+        return {
+          title: title ? wrapWebContent(title, "web_search") : "",
+          url: urlStr,
+          description: snippet ? wrapWebContent(snippet, "web_search") : "",
+          siteName: resolveSiteName(urlStr) || undefined,
+        };
+      });
+    },
+  );
 }
 
 async function runPerplexitySearchApi(params: {
@@ -1304,6 +1449,45 @@ async function runWebSearch(params: {
     return payload;
   }
 
+  if (params.provider === "serpstack") {
+    let period: string | undefined;
+    let periodStart: string | undefined;
+    let periodEnd: string | undefined;
+    if (params.dateAfter && params.dateBefore) {
+      period = "custom";
+      periodStart = params.dateAfter;
+      periodEnd = params.dateBefore;
+    } else if (params.freshness) {
+      period = SERPSTACK_PERIOD_MAP[params.freshness] ?? undefined;
+    }
+    const results = await runSerpstackSearch({
+      query: params.query,
+      accessKey: params.apiKey,
+      count: params.count,
+      timeoutSeconds: params.timeoutSeconds,
+      country: params.country,
+      language: params.language,
+      period,
+      periodStart,
+      periodEnd,
+    });
+    const payload = {
+      query: params.query,
+      provider: params.provider,
+      count: results.length,
+      tookMs: Date.now() - start,
+      externalContent: {
+        untrusted: true,
+        source: "web_search",
+        provider: params.provider,
+        wrapped: true,
+      },
+      results,
+    };
+    writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);
+    return payload;
+  }
+
   if (params.provider !== "brave") {
     throw new Error("Unsupported web search provider.");
   }
@@ -1401,6 +1585,7 @@ export function createWebSearchTool(options?: {
   const grokConfig = resolveGrokConfig(search);
   const geminiConfig = resolveGeminiConfig(search);
   const kimiConfig = resolveKimiConfig(search);
+  const serpstackConfig = resolveSerpstackConfig(search);
 
   const description =
     provider === "perplexity"
@@ -1411,7 +1596,9 @@ export function createWebSearchTool(options?: {
           ? "Search the web using Kimi by Moonshot. Returns AI-synthesized answers with citations from native $web_search."
           : provider === "gemini"
             ? "Search the web using Gemini with Google Search grounding. Returns AI-synthesized answers with citations from Google Search."
-            : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
+            : provider === "serpstack"
+              ? "Search the web using Serpstack (free tier: 100 searches/month, no credit card). Returns titles, URLs, and snippets. Supports country and language parameters."
+              : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
 
   return {
     label: "Web Search",
@@ -1430,7 +1617,9 @@ export function createWebSearchTool(options?: {
               ? resolveKimiApiKey(kimiConfig)
               : provider === "gemini"
                 ? resolveGeminiApiKey(geminiConfig)
-                : resolveSearchApiKey(search);
+                : provider === "serpstack"
+                  ? resolveSerpstackApiKey(serpstackConfig)
+                  : resolveSearchApiKey(search);
 
       if (!apiKey) {
         return jsonResult(missingSearchKeyPayload(provider));
@@ -1440,18 +1629,18 @@ export function createWebSearchTool(options?: {
       const count =
         readNumberParam(params, "count", { integer: true }) ?? search?.maxResults ?? undefined;
       const country = readStringParam(params, "country");
-      if (country && provider !== "brave" && provider !== "perplexity") {
+      if (country && provider !== "brave" && provider !== "perplexity" && provider !== "serpstack") {
         return jsonResult({
           error: "unsupported_country",
-          message: `country filtering is not supported by the ${provider} provider. Only Brave and Perplexity support country filtering.`,
+          message: `country filtering is not supported by the ${provider} provider. Only Brave, Perplexity, and Serpstack support country filtering.`,
           docs: "https://docs.openclaw.ai/tools/web",
         });
       }
       const language = readStringParam(params, "language");
-      if (language && provider !== "brave" && provider !== "perplexity") {
+      if (language && provider !== "brave" && provider !== "perplexity" && provider !== "serpstack") {
         return jsonResult({
           error: "unsupported_language",
-          message: `language filtering is not supported by the ${provider} provider. Only Brave and Perplexity support language filtering.`,
+          message: `language filtering is not supported by the ${provider} provider. Only Brave, Perplexity, and Serpstack support language filtering.`,
           docs: "https://docs.openclaw.ai/tools/web",
         });
       }
@@ -1487,10 +1676,10 @@ export function createWebSearchTool(options?: {
       const resolvedSearchLang = normalizedBraveLanguageParams.search_lang;
       const resolvedUiLang = normalizedBraveLanguageParams.ui_lang;
       const rawFreshness = readStringParam(params, "freshness");
-      if (rawFreshness && provider !== "brave" && provider !== "perplexity") {
+      if (rawFreshness && provider !== "brave" && provider !== "perplexity" && provider !== "serpstack") {
         return jsonResult({
           error: "unsupported_freshness",
-          message: `freshness filtering is not supported by the ${provider} provider. Only Brave and Perplexity support freshness.`,
+          message: `freshness filtering is not supported by the ${provider} provider. Only Brave, Perplexity, and Serpstack support freshness.`,
           docs: "https://docs.openclaw.ai/tools/web",
         });
       }
@@ -1512,10 +1701,10 @@ export function createWebSearchTool(options?: {
           docs: "https://docs.openclaw.ai/tools/web",
         });
       }
-      if ((rawDateAfter || rawDateBefore) && provider !== "brave" && provider !== "perplexity") {
+      if ((rawDateAfter || rawDateBefore) && provider !== "brave" && provider !== "perplexity" && provider !== "serpstack") {
         return jsonResult({
           error: "unsupported_date_filter",
-          message: `date_after/date_before filtering is not supported by the ${provider} provider. Only Brave and Perplexity support date filtering.`,
+          message: `date_after/date_before filtering is not supported by the ${provider} provider. Only Brave, Perplexity, and Serpstack support date filtering.`,
           docs: "https://docs.openclaw.ai/tools/web",
         });
       }
@@ -1619,5 +1808,7 @@ export const __testing = {
   resolveKimiModel,
   resolveKimiBaseUrl,
   extractKimiCitations,
+  resolveSerpstackConfig,
+  resolveSerpstackApiKey,
   resolveRedirectUrl: resolveCitationRedirectUrl,
 } as const;

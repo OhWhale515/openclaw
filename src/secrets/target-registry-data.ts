@@ -717,6 +717,17 @@ const SECRET_TARGET_REGISTRY: SecretTargetRegistryEntry[] = [
     includeInConfigure: true,
     includeInAudit: true,
   },
+  {
+    id: "tools.web.search.serpstack.apiKey",
+    targetType: "tools.web.search.serpstack.apiKey",
+    configFile: "openclaw.json",
+    pathPattern: "tools.web.search.serpstack.apiKey",
+    secretShape: "secret_input",
+    expectedResolvedValue: "string",
+    includeInPlan: true,
+    includeInConfigure: true,
+    includeInAudit: true,
+  },
 ];
 
 export { SECRET_TARGET_REGISTRY };

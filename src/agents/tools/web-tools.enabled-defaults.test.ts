@@ -5,10 +5,12 @@ import { __testing as webSearchTesting } from "./web-search.js";
 import { createWebFetchTool, createWebSearchTool } from "./web-tools.js";
 
 function installMockFetch(payload: unknown) {
+  const bodyStr = typeof payload === "string" ? payload : JSON.stringify(payload);
   const mockFetch = vi.fn((_input?: unknown, _init?: unknown) =>
     Promise.resolve({
       ok: true,
       json: () => Promise.resolve(payload),
+      text: () => Promise.resolve(bodyStr),
     } as Response),
   );
   global.fetch = withFetchPreconnect(mockFetch);
@@ -47,7 +49,9 @@ function createKimiSearchTool(kimiConfig?: { apiKey?: string; baseUrl?: string; 
   });
 }
 
-function createProviderSearchTool(provider: "brave" | "perplexity" | "grok" | "gemini" | "kimi") {
+function createProviderSearchTool(
+  provider: "brave" | "perplexity" | "grok" | "gemini" | "kimi" | "serpstack",
+) {
   const searchConfig =
     provider === "perplexity"
       ? { provider, perplexity: { apiKey: "pplx-config-test" } }
@@ -57,7 +61,9 @@ function createProviderSearchTool(provider: "brave" | "perplexity" | "grok" | "g
           ? { provider, gemini: { apiKey: "gemini-config-test" } }
           : provider === "kimi"
             ? { provider, kimi: { apiKey: "moonshot-config-test" } }
-            : { provider, apiKey: "brave-config-test" };
+            : provider === "serpstack"
+              ? { provider, serpstack: { apiKey: "serpstack-config-test" } }
+              : { provider, apiKey: "brave-config-test" };
   return createWebSearchTool({
     config: {
       tools: {
@@ -93,7 +99,7 @@ function installPerplexitySearchApiFetch(results?: Array<Record<string, unknown>
 }
 
 function createProviderSuccessPayload(
-  provider: "brave" | "perplexity" | "grok" | "gemini" | "kimi",
+  provider: "brave" | "perplexity" | "grok" | "gemini" | "kimi" | "serpstack",
 ) {
   if (provider === "brave") {
     return { web: { results: [] } };
@@ -113,6 +119,9 @@ function createProviderSuccessPayload(
         },
       ],
     };
+  }
+  if (provider === "serpstack") {
+    return { organic_results: [] };
   }
   return {
     choices: [{ finish_reason: "stop", message: { role: "assistant", content: "ok" } }],
@@ -216,7 +225,7 @@ describe("web_search provider proxy dispatch", () => {
     global.fetch = priorFetch;
   });
 
-  it.each(["brave", "perplexity", "grok", "gemini", "kimi"] as const)(
+  it.each(["brave", "perplexity", "grok", "gemini", "kimi", "serpstack"] as const)(
     "uses proxy-aware dispatcher for %s provider when HTTP_PROXY is configured",
     async (provider) => {
       vi.stubEnv("HTTP_PROXY", "http://127.0.0.1:7890");
@@ -368,6 +377,64 @@ describe("web_search perplexity Search API", () => {
     expect(body.search_recency_filter).toBe("month");
     expect(body.search_domain_filter).toEqual(["nature.com", ".gov"]);
     expect(body.search_language_filter).toEqual(["en"]);
+  });
+});
+
+describe("web_search serpstack provider", () => {
+  const priorFetch = global.fetch;
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    global.fetch = priorFetch;
+    webSearchTesting.SEARCH_CACHE.clear();
+  });
+
+  it("uses Serpstack when only SERPSTACK_ACCESS_KEY is set (auto-detect)", async () => {
+    vi.stubEnv("SERPSTACK_ACCESS_KEY", "serpstack-test-key");
+    vi.stubEnv("BRAVE_API_KEY", "");
+    const mockFetch = installMockFetch({
+      organic_results: [
+        { title: "Serpstack result", url: "https://example.com/page", snippet: "A snippet." },
+      ],
+    });
+    const tool = createWebSearchTool({ config: {}, sandboxed: true });
+    expect(tool).not.toBeNull();
+    const result = await tool?.execute?.("call-1", { query: "openclaw docs" });
+
+    expect(mockFetch).toHaveBeenCalled();
+    const calledUrl = mockFetch.mock.calls[0]?.[0];
+    expect(typeof calledUrl).toBe("string");
+    expect((calledUrl as string).startsWith("https://api.serpstack.com/search")).toBe(true);
+    expect((calledUrl as string).includes("query=openclaw+docs")).toBe(true);
+    expect((calledUrl as string).includes("access_key=")).toBe(true);
+    expect((mockFetch.mock.calls[0]?.[1] as RequestInit | undefined)?.method).toBe("GET");
+    expect(result?.details).toMatchObject({
+      provider: "serpstack",
+      externalContent: { untrusted: true, source: "web_search", wrapped: true },
+      results: expect.arrayContaining([
+        expect.objectContaining({
+          title: expect.stringContaining("Serpstack result"),
+          url: "https://example.com/page",
+          description: expect.stringContaining("A snippet."),
+        }),
+      ]),
+    });
+  });
+
+  it("returns missing key payload when Serpstack key is not set", async () => {
+    vi.stubEnv("SERPSTACK_ACCESS_KEY", "");
+    const tool = createWebSearchTool({
+      config: {
+        tools: {
+          web: {
+            search: { provider: "serpstack" },
+          },
+        },
+      },
+      sandboxed: true,
+    });
+    const result = await tool?.execute?.("call-1", { query: "test" });
+    expect(result?.details).toMatchObject({ error: "missing_serpstack_access_key" });
   });
 });
 

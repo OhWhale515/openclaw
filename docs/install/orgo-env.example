@@ -1,0 +1,6 @@
+# Orgo Platinum Fang – env file example
+# Copy to ~/.openclaw/.env, fill in values, then: chmod 600 ~/.openclaw/.env
+# Never commit the real .env file.
+
+OPENROUTER_API_KEY=
+GEMINI_API_KEY=

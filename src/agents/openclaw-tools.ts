@@ -105,6 +105,24 @@ export function createOpenClawTools(options?: {
     config: options?.config,
     sandboxed: options?.sandboxed,
   });
+  // #region agent log
+  fetch("http://127.0.0.1:7812/ingest/f4f56089-d2ca-4d5b-b01e-f046e03d0550", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "de43c7" },
+    body: JSON.stringify({
+      sessionId: "de43c7",
+      location: "openclaw-tools.ts:webSearch",
+      message: "createWebSearchTool result",
+      data: {
+        webSearchToolNull: webSearchTool === null,
+        hasConfig: !!options?.config,
+        sandboxed: options?.sandboxed,
+      },
+      timestamp: Date.now(),
+      hypothesisId: "A,E",
+    }),
+  }).catch(() => {});
+  // #endregion
   const webFetchTool = createWebFetchTool({
     config: options?.config,
     sandboxed: options?.sandboxed,
