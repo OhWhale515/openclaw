@@ -338,6 +338,7 @@ export function buildAgentSystemPrompt(params: {
   }
 
   const hasGateway = availableTools.has("gateway");
+  const hasWebSearch = availableTools.has("web_search");
   const readToolName = resolveToolName("read");
   const execToolName = resolveToolName("exec");
   const processToolName = resolveToolName("process");
@@ -445,6 +446,11 @@ export function buildAgentSystemPrompt(params: {
           '- session_status: show usage/time/model state and answer "what model are we using?"',
         ].join("\n"),
     "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",
+    ...(hasWebSearch
+      ? [
+          "When the user asks for current or live information (e.g. weather, news, recent events), use the web_search tool; do not say you lack internet access.",
+        ]
+      : []),
     `For long waits, avoid rapid poll loops: use ${execToolName} with enough yieldMs or ${processToolName}(action=poll, timeout=<ms>).`,
     "If a task is more complex or takes longer, spawn a sub-agent. Completion is push-based: it will auto-announce when done.",
     ...(acpHarnessSpawnAllowed
